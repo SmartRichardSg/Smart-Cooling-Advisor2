@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#123b55">
+<title>Smart Cooling Advisor</title>
+<link rel="icon" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<style>
+:root{--navy:#123b55;--blue:#247da0;--bg:#f2f6f8;--ink:#183344;--muted:#607684;--line:#dce6eb}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+header{background:linear-gradient(135deg,#123b55,#247da0);color:white;padding:25px 18px 28px;text-align:center}
+h1{font-size:25px;margin:0 0 6px}header p{margin:0;font-size:14px;opacity:.9}
+main{max-width:680px;margin:0 auto;padding:16px}
+.card{background:white;border-radius:18px;padding:18px;margin:0 0 14px;box-shadow:0 3px 14px #15394b0c}
+.label{font-size:13px;color:var(--muted);font-weight:650;letter-spacing:.3px;text-transform:uppercase}
+.bigrow{display:flex;justify-content:space-around;gap:10px;text-align:center;margin:14px 0}
+.metric{flex:1;background:#f5f8fa;border-radius:14px;padding:16px 8px}
+.metric strong{display:block;font-size:34px;letter-spacing:-1px}.metric span{font-size:13px;color:var(--muted)}
+.advice{border-radius:16px;padding:17px;background:#fff3dc;border:1px solid #f0d49b}
+.advice.good{background:#e8f6ed;border-color:#b9dfc5}.advice.bad{background:#fff0ed;border-color:#f2c2b9}
+.advice h2{font-size:21px;margin:0 0 6px}.advice p{margin:5px 0;line-height:1.45}
+button{border:0;border-radius:12px;padding:13px 16px;background:var(--navy);color:white;font-size:16px;font-weight:650;cursor:pointer}
+button.secondary{background:#e8f0f4;color:var(--navy)}button:active{opacity:.8}
+.actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}
+input{width:100%;font-size:20px;padding:13px;border:1px solid #cbd9e0;border-radius:12px;color:var(--ink);margin:7px 0 12px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.small{font-size:13px;color:var(--muted);line-height:1.5}
+.statline{display:flex;justify-content:space-between;border-bottom:1px solid var(--line);padding:10px 0;font-size:14px}
+canvas{width:100%;height:180px;display:block}
+.status{font-size:13px;color:var(--muted);margin-top:8px}
+footer{text-align:center;color:var(--muted);font-size:12px;padding:8px 18px 28px}
+a{color:var(--blue)}
+@media(max-width:420px){.metric strong{font-size:29px}.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header><h1>Smart Cooling Advisor</h1><p>Choose the better cooling option for your room</p></header>
+<main>
+<section class="card">
+ <div class="label">Your indoor readings</div>
+ <div class="bigrow">
+  <div class="metric"><strong id="tempNow">--.-°</strong><span>Temperature °C</span></div>
+  <div class="metric"><strong id="humNow">--%</strong><span>Humidity</span></div>
+ </div>
+ <div id="advice" class="advice"><h2>Enter your room readings</h2><p>Use the meter in your apartment to get a recommendation.</p></div>
+ <div class="actions">
+  <button onclick="refreshAdvice()">Update recommendation</button>
+  <button class="secondary" onclick="saveReading()">Save reading</button>
+ </div>
+ <p class="status" id="savedStatus">Readings are entered manually from your indoor meter.</p>
+</section>
+
+<section class="card">
+ <div class="label">Enter current indoor reading</div>
+ <div class="grid">
+  <div><label for="tempInput">Temperature (°C)</label><input id="tempInput" type="number" min="10" max="50" step="0.1" value="29.9"></div>
+  <div><label for="humInput">Relative humidity (%)</label><input id="humInput" type="number" min="0" max="100" step="0.1" value="79.4"></div>
+ </div>
+ <p class="small">Tip: place the meter about 1–2 metres from the air cooler, away from its direct airflow, to measure the room more fairly.</p>
+</section>
+
+<section class="card">
+ <div class="label">Singapore outdoor weather (NEA)</div>
+ <div class="statline"><span>Nearby outdoor temperature</span><strong id="outTemp">Loading…</strong></div>
+ <div class="statline"><span>Nearby outdoor humidity</span><strong id="outHum">Loading…</strong></div>
+ <div class="statline"><span>Weather station</span><strong id="station">Finding nearest…</strong></div>
+ <div class="status" id="neaStatus">NEA readings are outdoor station measurements, not your apartment's indoor readings.</div>
+ <div class="actions"><button class="secondary" onclick="loadNEA()">Refresh NEA data</button></div>
+</section>
+
+<section class="card">
+ <div class="label">Your saved indoor history</div>
+ <p class="small">The app saves readings when you tap “Save reading”. It also saves one reading every 30 minutes while this page stays open.</p>
+ <canvas id="chart" width="620" height="210"></canvas>
+ <div class="statline"><span>Saved readings</span><strong id="count">0</strong></div>
+ <div class="statline"><span>Lowest humidity today</span><strong id="low">—</strong></div>
+ <div class="statline"><span>Highest humidity today</span><strong id="high">—</strong></div>
+ <div class="actions">
+  <button class="secondary" onclick="exportData()">Export history</button>
+  <button class="secondary" onclick="clearHistory()">Clear history</button>
+ </div>
+</section>
+
+<section class="card">
+ <div class="label">How the recommendation works</div>
+ <div class="statline"><span>Below 60% humidity</span><strong>Try air cooler</strong></div>
+ <div class="statline"><span>60–70%</span><strong>Try and monitor</strong></div>
+ <div class="statline"><span>Above 70%</span><strong>Aircon preferable</strong></div>
+ <p class="small">These are starting guidelines for your evaporative Honeywell cooler, not fixed scientific limits. Room ventilation, temperature, airflow and your comfort also matter. An evaporative cooler adds moisture, so avoid using it in a closed room for long periods.</p>
+</section>
+</main>
+<footer>Uses Singapore NEA public weather data. Indoor readings are supplied by you. Data stays in this browser unless you export it.</footer>
+<script>
+const HOME={lat:1.35,lon:103.96};
+const STORE='smartCoolingReadingsV1';
+let history=JSON.parse(localStorage.getItem(STORE)||'[]');
+let lastStation='';
+function recommendation(t,h){
+ const box=document.getElementById('advice');
+ if(!Number.isFinite(h)||!Number.isFinite(t)){box.className='advice';box.innerHTML='<h2>Enter your room readings</h2><p>Use your indoor meter to get advice.</p>';return;}
+ if(h>70){box.className='advice bad';box.innerHTML='<h2>🔴 AIRCON PREFERABLE</h2><p>Humidity is high ('+h.toFixed(1)+'%). Your evaporative cooler is likely to provide limited cooling and will add moisture to the room.</p>';}
+ else if(h>=60){box.className='advice';box.innerHTML='<h2>🟡 TRY AIR COOLER & MONITOR</h2><p>Humidity is moderate ('+h.toFixed(1)+'%). Try the Honeywell with ventilation. If the room still feels warm or damp, switch to aircon.</p>';}
+ else{box.className='advice good';box.innerHTML='<h2>🟢 GOOD TIME TO TRY AIR COOLER</h2><p>Humidity is relatively lower ('+h.toFixed(1)+'%). Evaporative cooling may work better. Keep some ventilation.</p>';}
+}
+function refreshAdvice(){
+ const t=Number(document.getElementById('tempInput').value),h=Number(document.getElementById('humInput').value);
+ document.getElementById('tempNow').textContent=Number.isFinite(t)?t.toFixed(1)+'°':'--.-°';
+ document.getElementById('humNow').textContent=Number.isFinite(h)?h.toFixed(1)+'%':'--%';
+ recommendation(t,h);
+}
+function saveReading(){
+ const t=Number(document.getElementById('tempInput').value),h=Number(document.getElementById('humInput').value);
+ if(!Number.isFinite(t)||!Number.isFinite(h)||t<10||t>50||h<0||h>100){alert('Please enter a valid temperature and humidity.');return;}
+ history.push({time:new Date().toISOString(),temp:t,humidity:h});
+ history=history.slice(-500);localStorage.setItem(STORE,JSON.stringify(history));
+ document.getElementById('savedStatus').textContent='Saved at '+new Date().toLocaleTimeString();
+ renderHistory();refreshAdvice();
+}
+function renderHistory(){
+ document.getElementById('count').textContent=history.length;
+ const today=history.filter(x=>new Date(x.time).toDateString()===new Date().toDateString());
+ document.getElementById('low').textContent=today.length?Math.min(...today.map(x=>x.humidity)).toFixed(1)+'%':'—';
+ document.getElementById('high').textContent=today.length?Math.max(...today.map(x=>x.humidity)).toFixed(1)+'%':'—';
+ const c=document.getElementById('chart'),ctx=c.getContext('2d');ctx.clearRect(0,0,c.width,c.height);
+ const data=history.slice(-24);if(!data.length){ctx.fillStyle='#607684';ctx.font='16px sans-serif';ctx.fillText('Save a few readings to see your trend.',18,90);return;}
+ const left=42,right=15,top=18,bottom=35,w=c.width-left-right,h=c.height-top-bottom;
+ ctx.strokeStyle='#dce6eb';ctx.lineWidth=1;
+ [40,60,80,100].forEach(v=>{let y=top+(100-v)/100*h;ctx.beginPath();ctx.moveTo(left,y);ctx.lineTo(c.width-right,y);ctx.stroke();ctx.fillStyle='#607684';ctx.font='12px sans-serif';ctx.fillText(v+'%',5,y+4);});
+ ctx.strokeStyle='#247da0';ctx.lineWidth=3;ctx.beginPath();
+ data.forEach((p,i)=>{let x=left+(data.length===1?w/2:i/(data.length-1)*w),y=top+(100-p.humidity)/100*h;i?ctx.lineTo(x,y):ctx.moveTo(x,y);});ctx.stroke();
+ ctx.fillStyle='#607684';ctx.font='11px sans-serif';ctx.fillText('Oldest',left,c.height-8);ctx.fillText('Latest',c.width-55,c.height-8);
+}
+function hav(a,b){const r=Math.PI/180,d1=(a.lat-b.latitude)*r,d2=(a.lon-b.longitude)*r;return 2*6371*Math.asin(Math.sqrt(Math.sin(d1/2)**2+Math.cos(a.lat*r)*Math.cos(b.latitude*r)*Math.sin(d2/2)**2));}
+async function loadNEA(){
+ document.getElementById('neaStatus').textContent='Contacting NEA…';
+ try{
+  const urls=['https://api-open.data.gov.sg/v2/real-time/api/relative-humidity','https://api-open.data.gov.sg/v2/real-time/api/air-temperature'];
+  const [rhRes,tRes]=await Promise.all(urls.map(u=>fetch(u)));
+  if(!rhRes.ok||!tRes.ok)throw new Error('NEA service returned '+rhRes.status+'/'+tRes.status);
+  const [rh,tr]=await Promise.all([rhRes.json(),tRes.json()]);
+  const stations=rh.data.stations||[],temps=tr.data.readings?.[0]?.data||[],hums=rh.data.readings?.[0]?.data||[];
+  const nearest=stations.map(s=>({s,d:hav(HOME,s.labelLocation)})).sort((a,b)=>a.d-b.d)[0];
+  if(!nearest)throw new Error('No station information received');
+  const sid=nearest.s.id,rv=hums.find(x=>x.stationId===sid)?.value,tv=temps.find(x=>x.stationId===sid)?.value;
+  lastStation=nearest.s.name;
+  document.getElementById('station').textContent=lastStation+' ('+nearest.d.toFixed(1)+' km approx.)';
+  document.getElementById('outHum').textContent=rv==null?'—':Number(rv).toFixed(1)+'%';
+  document.getElementById('outTemp').textContent=tv==null?'—':Number(tv).toFixed(1)+'°C';
+  const stamp=rh.data.readings?.[0]?.timestamp||'';
+  document.getElementById('neaStatus').textContent='Outdoor NEA station reading. Updated '+(stamp?new Date(stamp).toLocaleString():'time unavailable')+'. It is not a substitute for your indoor meter.';
+ }catch(e){document.getElementById('neaStatus').textContent='Could not load NEA data right now. Your manual indoor readings still work. ('+e.message+')';}
+}
+function exportData(){
+ const blob=new Blob([JSON.stringify(history,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+ a.href=url;a.download='smart-cooling-history.json';a.click();URL.revokeObjectURL(url);
+}
+function clearHistory(){if(confirm('Delete all saved indoor readings from this browser?')){history=[];localStorage.removeItem(STORE);renderHistory();}}
+refreshAdvice();renderHistory();loadNEA();
+setInterval(loadNEA,15*60*1000);
+setInterval(()=>{const t=Number(document.getElementById('tempInput').value),h=Number(document.getElementById('humInput').value);if(Number.isFinite(t)&&Number.isFinite(h)&&t>=10&&t<=50&&h>=0&&h<=100){history.push({time:new Date().toISOString(),temp:t,humidity:h});history=history.slice(-500);localStorage.setItem(STORE,JSON.stringify(history));renderHistory();}},30*60*1000);
+</script>
+</body></html>
